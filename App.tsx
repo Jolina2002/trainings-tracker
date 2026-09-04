@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Food from './src/screens/Food';
 import SettingsScreen from './src/screens/Settings';
@@ -28,6 +28,18 @@ function Shell() {
 
   const clearFocus = useCallback(() => setTrainingFocus(null), []);
 
+  // Im Standalone-Modus auf dem iPhone liegt die Statusleiste bereits ausserhalb
+  // des Viewports (Bildschirm 852 - Fenster 793 = 59 = insets.top). Diesen Teil
+  // duerfen wir nicht noch einmal als Abstand addieren, sonst geht er doppelt weg.
+  const outsideTop =
+    Platform.OS === 'web' && typeof window !== 'undefined' && window.screen
+      ? Math.max(0, window.screen.height - window.innerHeight)
+      : 0;
+  const padTop = Math.max(0, insets.top - outsideTop) + 6;
+  // Unten gehoert der Safe-Area-Bereich zum Viewport – etwas Luft ueber dem
+  // Home-Indicator reicht, damit die Icons am Rand sitzen.
+  const padBottom = Math.max(Math.min(insets.bottom, 12), 6);
+
   const openTraining = (key: string) => {
     setTrainingFocus(key);
     setTab('training');
@@ -42,7 +54,7 @@ function Shell() {
   }
 
   return (
-    <View style={[s.root, { paddingTop: insets.top + 6 }]}>
+    <View style={[s.root, { paddingTop: padTop }]}>
       <View style={{ flex: 1 }}>
         {tab === 'today' && <Today dk={dk} setDk={setDk} onOpenTraining={openTraining} />}
         {tab === 'food' && <Food dk={dk} setDk={setDk} />}
@@ -50,7 +62,7 @@ function Shell() {
         {tab === 'settings' && <SettingsScreen />}
       </View>
 
-      <View style={[s.tabbar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[s.tabbar, { paddingBottom: padBottom }]}>
         {TABS.map((t) => {
           const active = tab === t.id;
           return (
@@ -88,9 +100,9 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: T.line,
     backgroundColor: T.card,
-    paddingTop: 10,
+    paddingTop: 6,
   },
-  tab: { flex: 1, alignItems: 'center', gap: 3 },
-  tabIcon: { fontSize: 19, color: T.dim2 },
-  tabLabel: { fontSize: 11, color: T.dim2, fontWeight: '600' },
+  tab: { flex: 1, alignItems: 'center', gap: 2 },
+  tabIcon: { fontSize: 18, lineHeight: 22, color: T.dim2 },
+  tabLabel: { fontSize: 10, lineHeight: 13, color: T.dim2, fontWeight: '600' },
 });
