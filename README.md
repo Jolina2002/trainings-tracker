@@ -97,6 +97,33 @@ Danach: eigenes Icon, Vollbild ohne Safari-Leiste, offline nutzbar
 kannst du alles als Text exportieren und wiederherstellen – nutz das ab und zu,
 Safari räumt lokalen Speicher unter Umständen auf.
 
+## Apple Health per Kurzbefehl
+
+Apple Health hat keine Web-Schnittstelle – eine Web-App kommt nicht heran. Ein
+Kurzbefehl darf Health aber lesen und die Werte in die Zwischenablage legen.
+
+**Kurzbefehl anlegen** (App „Kurzbefehle" → neuer Kurzbefehl):
+
+1. „Gesundheitsdaten abrufen" (*Find Health Samples*) – Typ **Schritte**,
+   sortiert nach Startdatum, Filter „Datum ist heute"
+2. „Statistik berechnen" (*Calculate Statistics*) → **Summe**
+3. „Gesundheitsdaten abrufen" – Typ **Gewicht**, absteigend, Limit 1
+4. „Text"-Aktion mit den beiden Ergebnissen:
+   ```
+   schritte=[Summe]
+   gewicht=[Gewicht]
+   ```
+5. „In die Zwischenablage kopieren"
+
+Optional als Automation täglich abends laufen lassen.
+
+**In der App:** Plan → Health-Import → einfügen → „Werte übernehmen".
+
+Der Import ist tolerant: `=` oder `:`, Zeilen oder Semikolon, deutsches
+Dezimalkomma, Groß-/Kleinschreibung egal. Erkannt werden `schritte`, `gewicht`,
+`wasser` (`2,5 l` und `2500 ml`) und `datum` (`04.09.2026` oder `2026-09-04`,
+Standard ist heute).
+
 ## Aufbau
 
 | Tab | Inhalt |

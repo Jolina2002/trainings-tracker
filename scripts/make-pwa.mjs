@@ -9,6 +9,7 @@ import { join } from 'node:path';
 const DIST = 'dist';
 const NAME = 'Trainings-Tracker';
 const BG = '#0D0F13';
+const CHROME = '#171A21';   // Farbe der Tab-Leiste
 const THEME = '#0D0F13';
 
 const bundle = readdirSync(join(DIST, '_expo/static/js/web')).find((f) => f.endsWith('.js'));
@@ -28,8 +29,8 @@ const manifest = {
   scope: '.',
   display: 'standalone',
   orientation: 'portrait',
-  background_color: BG,
-  theme_color: THEME,
+  background_color: CHROME,
+  theme_color: CHROME,
   icons: [
     { src: 'pwa-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
     { src: 'pwa-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
@@ -81,7 +82,13 @@ const head = `
     <meta name="apple-mobile-web-app-title" content="${NAME}" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <style>html,body{background:${BG};overscroll-behavior:none;}</style>`;
+    <style>
+      html, body { background: ${CHROME}; overscroll-behavior: none; }
+      /* inset:0 bezieht sich auf das visuelle Viewport – mit viewport-fit=cover
+         reicht das bis unter die Home-Indicator-Leiste. height muss dafuer weg,
+         sonst gewinnt das height:100% aus dem Expo-Reset. */
+      #root { position: fixed; inset: 0; height: auto; display: flex; }
+    </style>`;
 
 let out = html
   .replace(/<meta name="viewport"[^>]*>/, '')

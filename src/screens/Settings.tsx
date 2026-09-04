@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { confirm, notify } from '../dialog';
+import { describeImport, parseHealthText } from '../health';
 import { normalizeState, useStore } from '../store';
 import { KIND_LABEL, T } from '../theme';
 import { DayKind, Exercise, FoodItem, Session, Targets } from '../types';
 import { Btn, Card, Chip, Field, NumEdit, Row, Sheet } from '../ui';
-import { bmr, fmt, fmtInt, kcalFromMacros, uid, WD_LONG } from '../util';
+import { bmr, dayLabel, fmt, fmtInt, kcalFromMacros, todayKey, uid, WD_LONG } from '../util';
 
 type Panel =
   | { k: 'profile' }
@@ -18,7 +20,8 @@ type Panel =
   | { k: 'meals' }
   | { k: 'foods' }
   | { k: 'food'; id: string }
-  | { k: 'data' };
+  | { k: 'data' }
+  | { k: 'health' };
 
 const ACTIVITY = [
   { v: 1.2, label: 'Kaum aktiv' },
@@ -38,10 +41,11 @@ const TARGET_FIELDS: { key: keyof Targets; label: string; suffix: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const { settings, setSettings, resetAll, state, setState } = useStore();
+  const { settings, setSettings, resetAll, state, setState, setDay } = useStore();
   const [stack, setStack] = useState<Panel[]>([]);
   const [foodQuery, setFoodQuery] = useState('');
   const [importText, setImportText] = useState('');
+  const [healthText, setHealthText] = useState('');
   const [proteinPerKg, setProteinPerKg] = useState(1.7);
   const [fatPerKg, setFatPerKg] = useState(0.8);
 
@@ -69,7 +73,7 @@ export default function SettingsScreen() {
         water: Math.round((p.weightKg * 33) / 50) * 50,
       },
     }));
-    Alert.alert('Übernommen', 'Deine Tagesziele wurden aktualisiert.');
+    notify('Übernommen', 'Deine Tagesziele wurden aktualisiert.');
   };
 
   const setTarget = (key: keyof Targets, v: number | null) =>
@@ -104,6 +108,7 @@ export default function SettingsScreen() {
       case 'foods': return 'Lebensmittel';
       case 'food': return settings.foods.find((x) => x.id === top.id)?.name ?? 'Lebensmittel';
       case 'data': return 'Daten sichern';
+      case 'health': return 'Health-Import';
     }
   };
 
@@ -142,6 +147,12 @@ export default function SettingsScreen() {
           subtitle={`${Object.keys(state.days).length} erfasste Tage · exportieren oder wiederherstellen`}
           onPress={() => { setImportText(''); push({ k: 'data' }); }}
         />
+        <View style={st.sep} />
+        <Row
+          title="Health-Import"
+          subtitle="Schritte und Gewicht per Kurzbefehl aus Apple Health übernehmen"
+          onPress={() => { setHealthText(''); push({ k: 'health' }); }}
+        />
       </Card>
 
       <Card style={{ marginTop: 14 }}>
@@ -154,10 +165,13 @@ export default function SettingsScreen() {
           label="Alles zurücksetzen"
           style={{ marginTop: 14 }}
           onPress={() =>
-            Alert.alert('Wirklich zurücksetzen?', 'Alle Einträge und Anpassungen gehen verloren.', [
-              { text: 'Abbrechen', style: 'cancel' },
-              { text: 'Zurücksetzen', style: 'destructive', onPress: resetAll },
-            ])}
+            confirm(
+              'Wirklich zurücksetzen?',
+              'Alle Einträge und Anpassungen gehen verloren.',
+              resetAll,
+              'Zurücksetzen',
+              true,
+            )}
         />
       </Card>
 
@@ -478,21 +492,20 @@ export default function SettingsScreen() {
                 label="Einheit löschen"
                 style={{ marginTop: 24 }}
                 onPress={() =>
-                  Alert.alert('Einheit löschen?', sx.name, [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    {
-                      text: 'Löschen',
-                      style: 'destructive',
-                      onPress: () => {
-                        setSettings((s) => ({
-                          ...s,
-                          sessions: s.sessions.filter((x) => x.id !== sx.id),
-                          week: s.week.map((d) => (d.sessionId === sx.id ? { ...d, sessionId: null } : d)),
-                        }));
-                        pop();
-                      },
+                  confirm(
+                    'Einheit löschen?',
+                    sx.name,
+                    () => {
+                      setSettings((s) => ({
+                        ...s,
+                        sessions: s.sessions.filter((x) => x.id !== sx.id),
+                        week: s.week.map((d) => (d.sessionId === sx.id ? { ...d, sessionId: null } : d)),
+                      }));
+                      pop();
                     },
-                  ])}
+                    'Löschen',
+                    true,
+                  )}
               />
             </>
           );
@@ -632,34 +645,105 @@ export default function SettingsScreen() {
                 try {
                   parsed = JSON.parse(importText);
                 } catch {
-                  Alert.alert('Ungültig', 'Der Text ist kein gültiger Export.');
+                  notify('Ungültig', 'Der Text ist kein gültiger Export.');
                   return;
                 }
                 const p = parsed as { settings?: unknown; days?: unknown };
                 if (!p || typeof p !== 'object' || !p.settings || !p.days) {
-                  Alert.alert('Ungültig', 'Im Text fehlen Einstellungen oder Tage.');
+                  notify('Ungültig', 'Im Text fehlen Einstellungen oder Tage.');
                   return;
                 }
-                Alert.alert(
+                confirm(
                   'Daten ersetzen?',
                   'Alles, was aktuell in der App steht, wird überschrieben.',
-                  [
-                    { text: 'Abbrechen', style: 'cancel' },
-                    {
-                      text: 'Ersetzen',
-                      style: 'destructive',
-                      onPress: () => {
-                        setState(() => normalizeState(parsed));
-                        setImportText('');
-                        pop();
-                      },
-                    },
-                  ],
+                  () => {
+                    setState(() => normalizeState(parsed));
+                    setImportText('');
+                    pop();
+                  },
+                  'Ersetzen',
+                  true,
                 );
               }}
             />
           </>
         )}
+
+        {/* ---- Health-Import ---- */}
+        {top?.k === 'health' && (() => {
+          const parsed = parseHealthText(healthText);
+          const rows = describeImport(parsed);
+          const target = parsed.date ?? todayKey();
+          return (
+            <>
+              <Text style={st.note}>
+                Apple Health lässt sich von einer Web-App nicht direkt auslesen. Ein Kurzbefehl
+                darf es aber: Er holt die Tageswerte und legt sie in die Zwischenablage – hier
+                fügst du sie ein.
+              </Text>
+
+              <Text style={st.label}>EINFÜGEN</Text>
+              <Field
+                value={healthText}
+                onChangeText={setHealthText}
+                multiline
+                autoCorrect={false}
+                autoCapitalize="none"
+                placeholder={'schritte=8123\ngewicht=88,4'}
+                inputStyle={{ height: 90, textAlignVertical: 'top' }}
+              />
+
+              {rows.length > 0 && (
+                <View style={st.calcBox}>
+                  <CalcRow label="Tag" value={dayLabel(target)} />
+                  <View style={st.calcDiv} />
+                  {rows.map((row) => (
+                    <CalcRow key={row.label} label={row.label} value={row.value} strong />
+                  ))}
+                </View>
+              )}
+              {healthText.trim().length > 0 && rows.length === 0 && (
+                <Text style={st.note}>
+                  Daraus konnte ich nichts lesen. Erwartet werden Zeilen wie „schritte=8123“
+                  oder „gewicht: 88,4“.
+                </Text>
+              )}
+
+              <Btn
+                label="Werte übernehmen"
+                style={{ marginTop: 18 }}
+                disabled={rows.length === 0}
+                onPress={() => {
+                  setDay(target, (d) => ({
+                    ...d,
+                    steps: parsed.steps != null ? Math.round(parsed.steps) : d.steps,
+                    weight: parsed.weight != null ? Math.round(parsed.weight * 10) / 10 : d.weight,
+                    water: parsed.water != null ? Math.round(parsed.water) : d.water,
+                  }));
+                  setHealthText('');
+                  pop();
+                  notify('Übernommen', `${dayLabel(target)}: ${rows.map((r) => `${r.label} ${r.value}`).join(', ')}`);
+                }}
+              />
+
+              <Text style={st.label}>KURZBEFEHL ANLEGEN</Text>
+              <Text style={st.note}>
+                1. App „Kurzbefehle“ → neuer Kurzbefehl{'\n'}
+                2. „Gesundheitsdaten abrufen“ (Find Health Samples) → Typ Schritte,
+                sortiert nach Startdatum, Filter „Datum ist heute“{'\n'}
+                3. „Statistik berechnen“ (Calculate Statistics) → Summe{'\n'}
+                4. Nochmal „Gesundheitsdaten abrufen“ → Typ Gewicht, absteigend, Limit 1{'\n'}
+                5. „Text“-Aktion mit den beiden Ergebnissen:{'\n'}
+                {'    '}schritte=[Summe]{'\n'}
+                {'    '}gewicht=[Gewicht]{'\n'}
+                6. „In die Zwischenablage kopieren“{'\n'}
+                {'\n'}
+                Wasser und ein abweichendes Datum versteht der Import auch:
+                „wasser=2,5 l“, „datum=03.09.2026“.
+              </Text>
+            </>
+          );
+        })()}
       </Sheet>
     </ScrollView>
   );
