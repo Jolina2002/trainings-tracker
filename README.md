@@ -151,3 +151,9 @@ src/
   ui.tsx        UI-Bausteine (Card, Bar, Sheet, Felder …)
   screens/      Today, Food, Training, Settings
 ```
+
+## Hinweis für Weiterentwicklung
+
+Expo ändert sich zwischen den SDK-Versionen deutlich. Vor Codeänderungen die
+versionierte Doku lesen: https://docs.expo.dev/versions/v57.0.0/
+
